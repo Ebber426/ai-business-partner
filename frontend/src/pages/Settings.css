@@ -1,0 +1,84 @@
+.settings-page {
+    max-width: 800px;
+}
+
+.settings-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+}
+
+.settings-section h3 {
+    font-size: 16px;
+    font-weight: 600;
+    margin-bottom: 12px;
+}
+
+.settings-note {
+    font-size: 13px;
+    color: var(--text-secondary);
+    margin-bottom: 20px;
+}
+
+.settings-note code {
+    background: var(--bg-hover);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-family: monospace;
+}
+
+.settings-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.settings-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px;
+    background: var(--bg-hover);
+    border-radius: 8px;
+}
+
+.settings-label {
+    font-size: 14px;
+    color: var(--text-primary);
+}
+
+.keyword-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.keyword-tag {
+    padding: 6px 12px;
+    background: rgba(99, 102, 241, 0.1);
+    color: var(--accent-primary);
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 500;
+}
+
+.about-info {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.about-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 14px;
+}
+
+.about-row span:first-child {
+    color: var(--text-secondary);
+}
+
+.about-row span:last-child {
+    color: var(--text-primary);
+    font-weight: 500;
+}

@@ -34,22 +34,33 @@ def setup_tabs():
     if not sheet:
         return
 
-    required_tabs = ["Research", "Products", "Activity Log", "Revenue"]
+    # Map expected tabs to actual tab names in the user's sheet
+    # User has: research_logs, products, uploads, revenue, daily_activity
+    required_tabs = {
+        "Research": "research_logs",
+        "Products": "products", 
+        "Activity Log": "daily_activity",
+        "Revenue": "revenue"
+    }
+    
     existing_tabs = [ws.title for ws in sheet.worksheets()]
 
-    for tab in required_tabs:
-        if tab not in existing_tabs:
-            sheet.add_worksheet(title=tab, rows=100, cols=10)
-            # Add headers
-            ws = sheet.worksheet(tab)
-            if tab == "Research":
-                ws.append_row(["Timestamp", "Keyword", "Platform", "Signal", "Notes"])
-            elif tab == "Products":
-                ws.append_row(["Timestamp", "Product Name", "Type", "Link", "Status"])
-            elif tab == "Activity Log":
-                ws.append_row(["Timestamp", "Agent", "Action", "Result"])
-            elif tab == "Revenue":
-                ws.append_row(["Timestamp", "Source", "Amount", "Currency"])
+    for default_name, actual_name in required_tabs.items():
+        # Check if either name exists
+        if actual_name not in existing_tabs and default_name not in existing_tabs:
+            try:
+                sheet.add_worksheet(title=actual_name, rows=100, cols=10)
+                ws = sheet.worksheet(actual_name)
+                if "research" in actual_name.lower():
+                    ws.append_row(["Timestamp", "Keyword", "Platform", "Signal", "Notes"])
+                elif "products" in actual_name.lower():
+                    ws.append_row(["Timestamp", "Product Name", "Type", "Link", "Status"])
+                elif "activity" in actual_name.lower():
+                    ws.append_row(["Timestamp", "Agent", "Action", "Result"])
+                elif "revenue" in actual_name.lower():
+                    ws.append_row(["Timestamp", "Source", "Amount", "Currency"])
+            except Exception as e:
+                print(f"Tab setup note: {e}")
 
 def log_activity(agent_name, action, result):
     """Logs an action to the Activity Log tab."""
@@ -58,7 +69,11 @@ def log_activity(agent_name, action, result):
         return
     
     try:
-        ws = sheet.worksheet("Activity Log")
+        # Try user's tab name first, fallback to default
+        try:
+            ws = sheet.worksheet("daily_activity")
+        except:
+            ws = sheet.worksheet("Activity Log")
         timestamp = datetime.datetime.now().isoformat()
         ws.append_row([timestamp, agent_name, action, result])
         print(f"[{agent_name}] {action}: {result}")
@@ -72,7 +87,11 @@ def save_research(data):
         return
 
     try:
-        ws = sheet.worksheet("Research")
+        # Try user's tab name first, fallback to default
+        try:
+            ws = sheet.worksheet("research_logs")
+        except:
+            ws = sheet.worksheet("Research")
         timestamp = datetime.datetime.now().isoformat()
         # Expecting data to be a dict or list of dicts
         if isinstance(data, list):
@@ -102,7 +121,11 @@ def log_product(product_data):
         return
 
     try:
-        ws = sheet.worksheet("Products")
+        # Try user's tab name first, fallback to default
+        try:
+            ws = sheet.worksheet("products")
+        except:
+            ws = sheet.worksheet("Products")
         timestamp = datetime.datetime.now().isoformat()
         ws.append_row([
             timestamp,

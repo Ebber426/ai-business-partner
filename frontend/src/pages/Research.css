@@ -1,0 +1,40 @@
+.research-page {
+    max-width: 1400px;
+}
+
+.page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 32px;
+}
+
+.header-content {
+    flex: 1;
+}
+
+.message-bar {
+    padding: 16px 20px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    margin-bottom: 24px;
+    font-size: 14px;
+    animation: fadeIn 0.3s ease;
+}
+
+.trends-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 20px;
+}
+
+.loading-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 40vh;
+    gap: 16px;
+    color: var(--text-secondary);
+}

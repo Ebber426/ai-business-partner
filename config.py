@@ -6,9 +6,8 @@ from dotenv import load_dotenv
 load_dotenv()
 
 class Config:
-    # V1 Configuration
+    # Core Configuration
     GOOGLE_APPLICATION_CREDENTIALS = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
-    TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
     GOOGLE_SHEET_ID = os.getenv("GOOGLE_SHEET_ID")
 
     # V2: Etsy Configuration
@@ -27,10 +26,9 @@ class Config:
     PINTEREST_ACCESS_TOKEN = os.getenv("PINTEREST_ACCESS_TOKEN")
     PINTEREST_REFRESH_TOKEN = os.getenv("PINTEREST_REFRESH_TOKEN")
 
-    # Validate V1 configuration
+    # Validate configuration
     if not GOOGLE_APPLICATION_CREDENTIALS:
         print("Warning: GOOGLE_APPLICATION_CREDENTIALS not found in .env")
-    if not TELEGRAM_BOT_TOKEN:
-        print("Warning: TELEGRAM_BOT_TOKEN not found in .env")
     if not GOOGLE_SHEET_ID:
         print("Warning: GOOGLE_SHEET_ID not found in .env")
+

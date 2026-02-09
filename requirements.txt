@@ -2,7 +2,6 @@ google-api-python-client
 google-auth-httplib2
 google-auth-oauthlib
 gspread
-python-telegram-bot
 pytrends
 python-dotenv
 schedule
@@ -13,3 +12,7 @@ markdown
 praw
 beautifulsoup4
 fake-useragent
+# Web Backend
+fastapi
+uvicorn[standard]
+websockets
