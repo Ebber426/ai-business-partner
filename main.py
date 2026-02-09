@@ -95,31 +95,10 @@ async def startup():
 @app.get("/api/status")
 async def get_status():
     """Get system status and last activity."""
-    # sheet = get_sheet() # This line is no longer needed with local_db
-    last_activity = None
-    
-    if sheet:
-        try:
-            try:
-                ws = sheet.worksheet("daily_activity")
-            except:
-                ws = sheet.worksheet("Activity Log")
-            all_values = ws.get_all_values()
-            if len(all_values) > 1:
-                last_entry = all_values[-1]
-                last_activity = {
-                    "timestamp": last_entry[0],
-                    "agent": last_entry[1],
-                    "action": last_entry[2],
-                    "result": last_entry[3] if len(last_entry) > 3 else ""
-                }
-        except Exception as e:
-            logger.error(f"Error getting status: {e}")
-    
     return {
         "status": "online",
         "version": "2.0.0",
-        "last_activity": last_activity
+        "last_activity": None
     }
 
 @app.get("/api/revenue")
