@@ -1,10 +1,10 @@
 
 """
 Publishing Agent
-Publishes products from the Products sheet to Etsy and Pinterest.
+Publishes products to Pinterest for marketing automation.
+Users manually upload products to their shop and the app downloads the created files.
 """
 from app.utils.google_sheets import get_sheet, log_activity
-from app.utils.etsy_api import create_draft_listing, get_listing_url
 from app.utils.pinterest_api import create_pin, get_pin_url
 from config import Config
 
@@ -13,17 +13,17 @@ class PublishingAgent:
     def __init__(self):
         self.name = "Publishing Agent"
 
-    def run(self, platform="both"):
+    def run(self, platform="pinterest"):
         """
-        Publish the most recent unpublished product.
+        Publish the most recent unpublished product to Pinterest.
         
         Args:
-            platform: "etsy", "pinterest", or "both"
+            platform: "pinterest" (default)
         
         Returns:
             Dictionary with publish results.
         """
-        log_activity(self.name, "Start", f"Publishing to {platform}")
+        log_activity(self.name, "Start", f"Publishing to Pinterest")
         
         # Get unpublished product from sheet
         product = self.get_unpublished_product()
@@ -34,24 +34,17 @@ class PublishingAgent:
         
         results = {
             "product_name": product["name"],
-            "etsy": None,
             "pinterest": None
         }
         
-        # Publish to Etsy
-        if platform in ["etsy", "both"]:
-            etsy_result = self.publish_to_etsy(product)
-            results["etsy"] = etsy_result
-        
         # Publish to Pinterest
-        if platform in ["pinterest", "both"]:
-            pinterest_result = self.publish_to_pinterest(product)
-            results["pinterest"] = pinterest_result
+        pinterest_result = self.publish_to_pinterest(product)
+        results["pinterest"] = pinterest_result
         
         # Update product status in sheet
         self.update_product_status(product, results)
         
-        log_activity(self.name, "Complete", f"Published {product['name']}")
+        log_activity(self.name, "Complete", f"Published {product['name']} to Pinterest")
         return results
 
     def get_unpublished_product(self):
@@ -78,48 +71,6 @@ class PublishingAgent:
         except Exception as e:
             print(f"[Publishing] Error getting product: {e}")
             return None
-
-    def publish_to_etsy(self, product):
-        """
-        Create a draft listing on Etsy.
-        """
-        if not Config.ETSY_ACCESS_TOKEN:
-            return {"success": False, "error": "Etsy not authenticated"}
-        
-        try:
-            title = f"{product['name']} - Digital Download"
-            description = f"""
-{product['name']}
-
-This is a professionally designed {product['type']} template ready for immediate use.
-
-✓ Instant digital download
-✓ Easy to customize
-✓ Perfect for personal or professional use
-
-View the template: {product['link']}
-            """.strip()
-            
-            # Create draft listing (price in cents, e.g., 499 = $4.99)
-            listing_id = create_draft_listing(
-                title=title,
-                description=description,
-                price_cents=499,  # $4.99 default price
-                quantity=999,
-                taxonomy_id=68887648  # Digital goods category
-            )
-            
-            if listing_id:
-                return {
-                    "success": True,
-                    "listing_id": listing_id,
-                    "url": get_listing_url(listing_id)
-                }
-            else:
-                return {"success": False, "error": "Failed to create listing"}
-                
-        except Exception as e:
-            return {"success": False, "error": str(e)}
 
     def publish_to_pinterest(self, product):
         """
@@ -174,14 +125,9 @@ Get organized with this stunning {product['type']} template!
             ws = sheet.worksheet("Products")
             
             # Determine new status
-            etsy_ok = results.get("etsy", {}).get("success", False)
             pinterest_ok = results.get("pinterest", {}).get("success", False)
             
-            if etsy_ok and pinterest_ok:
-                new_status = "Published (Both)"
-            elif etsy_ok:
-                new_status = "Published (Etsy)"
-            elif pinterest_ok:
+            if pinterest_ok:
                 new_status = "Published (Pinterest)"
             else:
                 new_status = "Publish Failed"
@@ -195,5 +141,5 @@ Get organized with this stunning {product['type']} template!
 
 if __name__ == "__main__":
     agent = PublishingAgent()
-    result = agent.run("both")
+    result = agent.run("pinterest")
     print(result)

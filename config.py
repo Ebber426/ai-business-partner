@@ -10,14 +10,6 @@ class Config:
     GOOGLE_APPLICATION_CREDENTIALS = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
     GOOGLE_SHEET_ID = os.getenv("GOOGLE_SHEET_ID")
 
-    # V2: Etsy Configuration
-    ETSY_API_KEY = os.getenv("ETSY_API_KEY")
-    ETSY_API_SECRET = os.getenv("ETSY_API_SECRET")
-    ETSY_REDIRECT_URI = os.getenv("ETSY_REDIRECT_URI", "http://localhost:8080/etsy/callback")
-    ETSY_SHOP_ID = os.getenv("ETSY_SHOP_ID")
-    ETSY_ACCESS_TOKEN = os.getenv("ETSY_ACCESS_TOKEN")
-    ETSY_REFRESH_TOKEN = os.getenv("ETSY_REFRESH_TOKEN")
-
     # V2: Pinterest Configuration
     PINTEREST_APP_ID = os.getenv("PINTEREST_APP_ID")
     PINTEREST_APP_SECRET = os.getenv("PINTEREST_APP_SECRET")

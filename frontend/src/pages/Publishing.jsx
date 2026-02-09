@@ -4,7 +4,6 @@ import './Publishing.css'
 function Publishing() {
     const [publishing, setPublishing] = useState(false)
     const [results, setResults] = useState(null)
-    const [selectedPlatform, setSelectedPlatform] = useState('both')
 
     const handlePublish = async () => {
         setPublishing(true)
@@ -14,7 +13,7 @@ function Publishing() {
             const response = await fetch('/api/publish', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ platform: selectedPlatform })
+                body: JSON.stringify({ platform: 'pinterest' })
             })
             const data = await response.json()
             setResults(data)
@@ -29,56 +28,21 @@ function Publishing() {
         <div className="publishing-page animate-fadeIn">
             <div className="page-header">
                 <h1 className="page-title">Publishing</h1>
-                <p className="page-subtitle">Publish products to Etsy and Pinterest</p>
+                <p className="page-subtitle">Publish products to Pinterest for marketing automation</p>
             </div>
 
             <div className="publishing-grid">
                 <div className="card platform-card">
                     <div className="platform-header">
-                        <span className="platform-icon">🛍️</span>
-                        <div>
-                            <h3>Etsy</h3>
-                            <p>Create draft listings</p>
-                        </div>
-                    </div>
-                    <label className="platform-checkbox">
-                        <input
-                            type="checkbox"
-                            checked={selectedPlatform === 'etsy' || selectedPlatform === 'both'}
-                            onChange={(e) => {
-                                if (e.target.checked) {
-                                    setSelectedPlatform(selectedPlatform === 'pinterest' ? 'both' : 'etsy')
-                                } else {
-                                    setSelectedPlatform(selectedPlatform === 'both' ? 'pinterest' : '')
-                                }
-                            }}
-                        />
-                        <span>Include Etsy</span>
-                    </label>
-                </div>
-
-                <div className="card platform-card">
-                    <div className="platform-header">
                         <span className="platform-icon">📌</span>
                         <div>
                             <h3>Pinterest</h3>
-                            <p>Create pins with links</p>
+                            <p>Create pins with links to your products</p>
                         </div>
                     </div>
-                    <label className="platform-checkbox">
-                        <input
-                            type="checkbox"
-                            checked={selectedPlatform === 'pinterest' || selectedPlatform === 'both'}
-                            onChange={(e) => {
-                                if (e.target.checked) {
-                                    setSelectedPlatform(selectedPlatform === 'etsy' ? 'both' : 'pinterest')
-                                } else {
-                                    setSelectedPlatform(selectedPlatform === 'both' ? 'etsy' : '')
-                                }
-                            }}
-                        />
-                        <span>Include Pinterest</span>
-                    </label>
+                    <p className="platform-note">
+                        💡 Products are manually uploaded to your shop. This app creates marketing pins on Pinterest to drive traffic.
+                    </p>
                 </div>
             </div>
 
@@ -86,7 +50,7 @@ function Publishing() {
                 <button
                     className="btn btn-primary btn-lg"
                     onClick={handlePublish}
-                    disabled={publishing || !selectedPlatform}
+                    disabled={publishing}
                 >
                     {publishing ? (
                         <>
@@ -94,7 +58,7 @@ function Publishing() {
                             Publishing...
                         </>
                     ) : (
-                        <>🚀 Publish Latest Product</>
+                        <>🚀 Publish to Pinterest</>
                     )}
                 </button>
             </div>
@@ -111,13 +75,6 @@ function Publishing() {
                     ) : (
                         <>
                             <p className="result-product">Product: {results.product_name}</p>
-
-                            {results.etsy && (
-                                <div className={`result-item ${results.etsy.success ? 'success' : 'error'}`}>
-                                    <span>{results.etsy.success ? '✅' : '❌'}</span>
-                                    <span>Etsy: {results.etsy.success ? results.etsy.url || 'Created' : results.etsy.error}</span>
-                                </div>
-                            )}
 
                             {results.pinterest && (
                                 <div className={`result-item ${results.pinterest.success ? 'success' : 'error'}`}>

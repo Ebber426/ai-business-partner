@@ -1,30 +1,27 @@
 
 # AI Business Partner – Digital Product Edition (MVP)
 
-An intelligent agent system that acts as a digital product business partner. It researches trends, creates digital products (Google Sheets planners), logs all activity, and reports status via a Telegram Bot.
+An intelligent agent system that acts as a digital product business partner. It researches trends, creates digital products (Google Sheets planners), logs all activity, and automates Pinterest marketing.
 
 ## Features
 
 ### V1 - Core Features
-- **Research Agent**: Scrapes/queries trends (using `pytrends` or simulation) to find profitable keywords.
+- **Research Agent**: Analyzes trends to find profitable digital product keywords.
 - **Creation Agent**: Generates Google Sheets templates (Daily Planners, Budget Trackers) based on research.
-- **System Memory**: Logs all research, products, and activity to a central Google Sheet.
+- **System Memory**: Logs all research, products, and activity to a central database.
 
-### V2 - Publishing Features
-- **Publishing Agent**: Auto-publish products to Etsy and Pinterest.
-- **OAuth Integration**: Secure authentication with marketplace APIs.
+### V2 - Marketing Automation
+- **Pinterest Agent**: Automatically creates pins to promote your products on Pinterest.
+- **Manual Upload Workflow**: You manually upload products to your shop (e.g., Etsy, Gumroad). The app downloads the created file and automates Pinterest marketing.
 
-### Telegram Commands
-| Command | Description |
+### Web Interface Commands
+| Feature | Description |
 |---------|-------------|
-| `/start` | View all available commands |
-| `/status` | Check system status |
-| `/revenue` | View total revenue |
-| `/whatdidyoudotoday` | View daily activity log |
-| `/run` | Research + Create a product |
-| `/publish` | Publish product to Etsy/Pinterest |
-| `/auth_etsy` | Get Etsy authorization URL |
-| `/auth_pinterest` | Get Pinterest authorization URL |
+| **Dashboard** | View system status & activity |
+| **Research** | Browse and manage trend research |
+| **Products** | Create new digital products from trends |
+| **Publishing** | Publish to Pinterest for marketing |
+| **Settings** | Configure API credentials |
 
 ---
 
@@ -44,12 +41,7 @@ An intelligent agent system that acts as a digital product business partner. It 
 3. Copy the **Sheet ID** from the URL (e.g., `https://docs.google.com/spreadsheets/d/YOUR_SHEET_ID/edit`).
 4. (Optional) The system will try to create tabs, but you can create them manually: `Research`, `Products`, `Activity Log`, `Revenue`.
 
-### 3. Telegram Bot Setup
-1. Open Telegram and search for `@BotFather`.
-2. Send `/newbot` and follow instructions.
-3. Copy the **HTTP API Token**.
-
-### 4. Project Configuration
+### 3. Project Configuration
 1. Navigate to the `ai-business-partner` folder.
 2. Create a virtual environment:
    ```bash
@@ -61,37 +53,47 @@ An intelligent agent system that acts as a digital product business partner. It 
    pip install -r requirements.txt
    ```
 4. Configure `.env`:
-   - Fill in `TELEGRAM_BOT_TOKEN` and `GOOGLE_SHEET_ID`.
+   - Fill in `GOOGLE_SHEET_ID`.
    - Ensure `GOOGLE_APPLICATION_CREDENTIALS` points to your JSON file.
 
-### 5. V2: Etsy & Pinterest Setup (Optional)
-
-#### Etsy
-1. Register at [developers.etsy.com](https://developers.etsy.com).
-2. Create an app and get your **API Key** and **Secret**.
-3. Get your **Shop ID** from your Etsy shop URL.
-4. Fill in `.env`: `ETSY_API_KEY`, `ETSY_API_SECRET`, `ETSY_SHOP_ID`.
-5. Run the bot, use `/auth_etsy`, and complete OAuth flow.
-
-#### Pinterest
+### 4. Pinterest Setup (Optional)
 1. Register at [developers.pinterest.com](https://developers.pinterest.com).
 2. Create an app and get your **App ID** and **Secret**.
 3. Get your **Board ID** from your Pinterest board URL.
 4. Fill in `.env`: `PINTEREST_APP_ID`, `PINTEREST_APP_SECRET`, `PINTEREST_BOARD_ID`.
-5. Run the bot, use `/auth_pinterest`, and complete OAuth flow.
+5. Run the app and complete Pinterest OAuth flow.
 
 ---
 
 ## How to Run
 
+### Backend
 1. Activate your virtual environment.
-2. Run the orchestrator:
+2. Run the FastAPI server:
    ```bash
-   python orchestrator.py
+   python -m uvicorn main:app --port 8000
    ```
-3. Open your Telegram Bot and send `/start`.
-4. Send `/run` to trigger the AI agent cycle immediately.
-5. Send `/publish` to publish the latest product to marketplaces.
+   
+### Frontend
+1. Navigate to the `frontend` folder:
+   ```bash
+   cd frontend
+   ```
+2. Install dependencies (first time only):
+   ```bash
+   npm install
+   ```
+3. Run the development server:
+   ```bash
+   npm run dev
+   ```
+4. Open your browser to `http://localhost:5173`
+
+### Workflow
+1. **Research**: Click "Run Research" to find trending keywords.
+2. **Create**: Select a trend and click "Create Product" to generate a Google Sheet template.
+3. **Upload**: Manually upload the product to your shop (Etsy, Gumroad, etc.).
+4. **Market**: Click "Publish to Pinterest" to automatically create marketing pins.
 
 ## Directory Structure
 ```
@@ -100,13 +102,13 @@ ai-business-partner/
 │   ├── agents/
 │   │   ├── research_agent.py    # Trend research
 │   │   ├── creation_agent.py    # Google Sheets product creation
-│   │   └── publishing_agent.py  # Etsy/Pinterest publishing
+│   │   └── publishing_agent.py  # Pinterest marketing automation
 │   └── utils/
 │       ├── google_sheets.py     # System memory
-│       ├── telegram_bot.py      # Command center
-│       ├── etsy_api.py          # Etsy OAuth + API
+│       ├── local_db.py          # Local database
 │       └── pinterest_api.py     # Pinterest OAuth + API
-├── orchestrator.py              # Main entry point
+├── frontend/                    # React + Vite web interface
+├── main.py                      # FastAPI backend
 ├── config.py                    # Environment config
 ├── requirements.txt
 └── .env                         # API keys (not committed)

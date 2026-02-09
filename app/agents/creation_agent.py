@@ -10,27 +10,35 @@ class CreationAgent:
     def run(self, trend_data):
         """Creates a product based on the trend data."""
         keyword = trend_data.get("keyword", "Untitled Product")
+        print(f"[{self.name}] Starting product creation for: {keyword}")
         log_activity(self.name, "Start", f"Creating product for: {keyword}")
 
         try:
             # Create a new spreadsheet
             sheet_name = f"{keyword.title()} - {trend_data.get('platform', 'MVP')}"
+            print(f"[{self.name}] Creating spreadsheet: {sheet_name}")
             sh = self.client.create(sheet_name)
+            print(f"[{self.name}] Spreadsheet created successfully")
             
             # Apply template based on keyword
             if "planner" in keyword.lower():
+                print(f"[{self.name}] Applying planner template")
                 self.create_planner_template(sh)
                 type_ = "Planner"
             elif "budget" in keyword.lower() or "finance" in keyword.lower():
+                print(f"[{self.name}] Applying budget template")
                 self.create_budget_template(sh)
                 type_ = "Tracker"
             else:
+                print(f"[{self.name}] Applying generic template")
                 self.create_generic_template(sh)
                 type_ = "Generic"
 
             # Share the sheet
+            print(f"[{self.name}] Sharing sheet publicly")
             sh.share(None, perm_type='anyone', role='reader')
             link = sh.url
+            print(f"[{self.name}] Sheet URL: {link}")
 
             # Log success
             product_data = {
@@ -41,11 +49,15 @@ class CreationAgent:
             }
             log_product(product_data)
             log_activity(self.name, "Success", f"Created {sheet_name}")
+            print(f"[{self.name}] ✅ Product creation complete!")
             return link
 
         except Exception as e:
-            log_activity(self.name, "Error", f"Failed to create product: {e}")
-            return None
+            error_msg = f"Failed to create product '{keyword}': {str(e)}"
+            print(f"[{self.name}] ❌ {error_msg}")
+            log_activity(self.name, "Error", error_msg)
+            # Raise exception with details instead of returning None
+            raise RuntimeError(error_msg) from e
 
     def create_planner_template(self, sh):
         """Creates a Daily Planner layout."""

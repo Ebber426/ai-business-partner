@@ -67,8 +67,14 @@
     font-weight: 500;
 }
 
+.trend-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
 .trend-action {
-    width: 100%;
+    flex: 1;
     padding: 10px;
     background: transparent;
     border: 1px solid var(--border-color);
@@ -77,10 +83,29 @@
     font-size: 13px;
     font-weight: 500;
     transition: all var(--transition-fast);
+    cursor: pointer;
 }
 
 .trend-card:hover .trend-action {
     background: var(--accent-gradient);
     border-color: transparent;
     color: white;
+}
+
+.trend-delete {
+    padding: 10px 12px;
+    background: transparent;
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    font-size: 16px;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+    opacity: 0.6;
+}
+
+.trend-delete:hover {
+    background: rgba(239, 68, 68, 0.1);
+    border-color: var(--accent-error);
+    opacity: 1;
+    transform: scale(1.1);
 }

@@ -33,15 +33,18 @@ function Research() {
             const response = await fetch('/api/research/run', { method: 'POST' })
             const data = await response.json()
 
-            if (data.success) {
+            if (response.ok && data.success) {
                 setMessage(`✅ Found ${data.count} trends!`)
                 // Refresh the list
                 fetchResearch()
             } else {
-                setMessage('❌ Research failed. Check logs.')
+                const errorDetail = data.detail || 'Research failed'
+                setMessage(`❌ ${errorDetail}`)
+                console.error('Research failed:', errorDetail)
             }
         } catch (error) {
-            setMessage(`❌ Error: ${error.message}`)
+            setMessage(`❌ Network error: ${error.message}`)
+            console.error('Research error:', error)
         } finally {
             setResearching(false)
         }
@@ -58,13 +61,66 @@ function Research() {
             })
             const data = await response.json()
 
-            if (data.success) {
+            if (response.ok && data.success) {
                 setMessage(`✅ Product created! Link: ${data.link}`)
             } else {
-                setMessage('❌ Failed to create product.')
+                // Show detailed error from API
+                const errorDetail = data.detail || 'Unknown error occurred'
+                setMessage(`❌ Failed: ${errorDetail}`)
+                console.error('Product creation failed:', errorDetail)
             }
         } catch (error) {
-            setMessage(`❌ Error: ${error.message}`)
+            setMessage(`❌ Network error: ${error.message}`)
+            console.error('Product creation error:', error)
+        }
+    }
+
+    const deleteItem = async (keyword) => {
+        setMessage(`🗑️ Deleting: ${keyword}...`)
+
+        try {
+            const response = await fetch(`/api/research/${encodeURIComponent(keyword)}`, {
+                method: 'DELETE'
+            })
+            const data = await response.json()
+
+            if (response.ok && data.success) {
+                // Remove from UI immediately
+                setTrends(trends.filter(t => t.keyword !== keyword))
+                setMessage(`✅ Deleted: ${keyword}`)
+            } else {
+                const errorDetail = data.detail || 'Failed to delete'
+                setMessage(`❌ ${errorDetail}`)
+                console.error('Delete failed:', errorDetail)
+            }
+        } catch (error) {
+            setMessage(`❌ Network error: ${error.message}`)
+            console.error('Delete error:', error)
+        }
+    }
+
+    const clearAllResearch = async () => {
+        if (!window.confirm('Clear all research items from the latest run?')) return
+
+        setMessage('🧹 Clearing all research...')
+
+        try {
+            const response = await fetch('/api/research/latest', {
+                method: 'DELETE'
+            })
+            const data = await response.json()
+
+            if (response.ok && data.success) {
+                setTrends([])
+                setMessage(`✅ Cleared ${data.deleted_count} items`)
+            } else {
+                const errorDetail = data.detail || 'Failed to clear research'
+                setMessage(`❌ ${errorDetail}`)
+                console.error('Clear failed:', errorDetail)
+            }
+        } catch (error) {
+            setMessage(`❌ Network error: ${error.message}`)
+            console.error('Clear error:', error)
         }
     }
 
@@ -75,20 +131,31 @@ function Research() {
                     <h1 className="page-title">Research</h1>
                     <p className="page-subtitle">Discover trending digital product opportunities</p>
                 </div>
-                <button
-                    className="btn btn-primary"
-                    onClick={runResearch}
-                    disabled={researching}
-                >
-                    {researching ? (
-                        <>
-                            <div className="spinner"></div>
-                            Researching...
-                        </>
-                    ) : (
-                        <>🔍 Run Research</>
+                <div className="header-actions">
+                    <button
+                        className="btn btn-primary"
+                        onClick={runResearch}
+                        disabled={researching}
+                    >
+                        {researching ? (
+                            <>
+                                <div className="spinner"></div>
+                                Researching...
+                            </>
+                        ) : (
+                            <>🔍 Run Research</>
+                        )}
+                    </button>
+                    {trends.length > 0 && (
+                        <button
+                            className="btn btn-secondary"
+                            onClick={clearAllResearch}
+                            title="Clear all items from latest research run"
+                        >
+                            🧹 Clear Research
+                        </button>
                     )}
-                </button>
+                </div>
             </div>
 
             {message && (
@@ -112,11 +179,12 @@ function Research() {
                 <div className="trends-grid">
                     {trends.map((trend, i) => (
                         <TrendCard
-                            key={i}
-                            keyword={trend.Keyword || trend.keyword}
-                            score={parseFloat(trend.Signal || trend.signal || 0)}
-                            sources={[trend.Platform || trend.platform || 'Unknown']}
-                            onSelect={() => createProduct(trend.Keyword || trend.keyword)}
+                            key={`${trend.keyword}-${i}`}
+                            keyword={trend.keyword || trend.Keyword}
+                            score={parseFloat(trend.signal || trend.Signal || 0)}
+                            sources={[trend.platform || trend.Platform || 'Google Trends']}
+                            onSelect={() => createProduct(trend.keyword || trend.Keyword)}
+                            onDelete={deleteItem}
                         />
                     ))}
                 </div>

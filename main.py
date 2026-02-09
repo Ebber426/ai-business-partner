@@ -14,8 +14,15 @@ from pydantic import BaseModel
 
 from app.agents.research_agent import ResearchAgent
 from app.agents.creation_agent import CreationAgent
-from app.agents.publishing_agent import PublishingAgent
-from app.utils.google_sheets import log_activity, setup_tabs, get_sheet, get_revenue
+from app.utils.local_db import (
+    init_db,
+    log_activity,
+    get_latest_research_run,
+    delete_research_item,
+    delete_latest_research_run,
+    save_product,
+    get_all_products
+)
 
 # Configure logging
 logging.basicConfig(
@@ -73,22 +80,22 @@ class CreateProductRequest(BaseModel):
     platform: Optional[str] = "Web"
 
 class PublishRequest(BaseModel):
-    platform: str = "both"  # "etsy", "pinterest", or "both"
+    platform: str = "pinterest"  # "pinterest" only
 
 
 # ==================== API ENDPOINTS ====================
 
 @app.on_event("startup")
-async def startup_event():
-    """Initialize on startup."""
+async def startup():
+    """Initialize application on startup."""
     logger.info("🚀 AI Business Partner API starting...")
-    setup_tabs()
-    logger.info("✅ Google Sheets tabs verified")
+    init_db()
+    logger.info("✅ Local database initialized")
 
 @app.get("/api/status")
 async def get_status():
     """Get system status and last activity."""
-    sheet = get_sheet()
+    # sheet = get_sheet() # This line is no longer needed with local_db
     last_activity = None
     
     if sheet:
@@ -126,26 +133,20 @@ async def api_get_revenue():
 
 @app.get("/api/research")
 async def get_research():
-    """Get latest research results from Google Sheets."""
-    sheet = get_sheet()
-    if not sheet:
-        raise HTTPException(status_code=500, detail="Failed to connect to Google Sheets")
-    
+    """Get latest research run results from Google Sheets."""
+    logger.info("Fetching latest research run")
     try:
-        try:
-            ws = sheet.worksheet("research_logs")
-        except:
-            ws = sheet.worksheet("Research")
-        
-        records = ws.get_all_records()
-        # Return last 20 results
-        return {"results": records[-20:] if len(records) > 20 else records}
+        result = get_latest_research_run()
+        logger.info(f"Retrieved {len(result.get('results', []))} items from latest run")
+        return result
     except Exception as e:
+        logger.error(f"Research fetch error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/research/run")
 async def run_research():
-    """Trigger the research agent."""
+    """Trigger the research agent to create a new research run."""
+    logger.info("Starting new research run")
     await manager.broadcast({"type": "status", "message": "Starting research..."})
     
     try:
@@ -155,6 +156,7 @@ async def run_research():
         loop = asyncio.get_event_loop()
         results = await loop.run_in_executor(None, researcher.run)
         
+        logger.info(f"Research complete: {len(results)} trends found")
         await manager.broadcast({
             "type": "research_complete",
             "message": f"Found {len(results)} trends",
@@ -163,13 +165,68 @@ async def run_research():
         
         return {
             "success": True,
-            "count": len(results),
-            "results": results[:5]  # Top 5
+            "count": len(results)
         }
+    except RuntimeError as e:
+        # Specific error from ResearchAgent
+        error_msg = str(e)
+        logger.error(f"Research agent error: {error_msg}")
+        await manager.broadcast({"type": "error", "message": error_msg})
+        raise HTTPException(status_code=500, detail=error_msg)
     except Exception as e:
-        logger.error(f"Research error: {e}")
-        await manager.broadcast({"type": "error", "message": str(e)})
-        raise HTTPException(status_code=500, detail=str(e))
+        # Unexpected error
+        error_msg = f"Unexpected error during research: {str(e)}"
+        logger.error(error_msg, exc_info=True)
+        await manager.broadcast({"type": "error", "message": error_msg})
+        raise HTTPException(status_code=500, detail=error_msg)
+
+@app.delete("/api/research/{keyword}")
+async def delete_research_keyword(keyword: str):
+    """Delete a single research item from the latest run."""
+    logger.info(f"Deleting research item: {keyword}")
+    
+    try:
+        delete_research_item(keyword)
+        log_activity("User", "Delete", f"Removed keyword: {keyword}")
+        
+        await manager.broadcast({
+            "type": "research_deleted",
+            "message": f"Deleted: {keyword}"
+        })
+        
+        return {"success": True, "keyword": keyword}
+    except RuntimeError as e:
+        error_msg = str(e)
+        logger.error(f"Delete error: {error_msg}")
+        raise HTTPException(status_code=500, detail=error_msg)
+    except Exception as e:
+        error_msg = f"Unexpected error deleting item: {str(e)}"
+        logger.error(error_msg, exc_info=True)
+        raise HTTPException(status_code=500, detail=error_msg)
+
+@app.delete("/api/research/latest")
+async def clear_latest_research():
+    """Clear all items from the latest research run."""
+    logger.info("Clearing latest research run")
+    
+    try:
+        deleted_count = delete_latest_research_run()
+        log_activity("User", "Clear Research", f"Cleared {deleted_count} items from latest run")
+        
+        await manager.broadcast({
+            "type": "research_cleared",
+            "message": f"Cleared {deleted_count} items"
+        })
+        
+        return {"success": True, "deleted_count": deleted_count}
+    except RuntimeError as e:
+        error_msg = str(e)
+        logger.error(f"Clear error: {error_msg}")
+        raise HTTPException(status_code=500, detail=error_msg)
+    except Exception as e:
+        error_msg = f"Unexpected error clearing research: {str(e)}"
+        logger.error(error_msg, exc_info=True)
+        raise HTTPException(status_code=500, detail=error_msg)
 
 
 # ==================== PRODUCT ENDPOINTS ====================
@@ -195,6 +252,7 @@ async def get_products():
 @app.post("/api/products/create")
 async def create_product(request: CreateProductRequest):
     """Create a new product from a trend keyword."""
+    logger.info(f"Product creation requested for: {request.keyword}")
     await manager.broadcast({"type": "status", "message": f"Creating product: {request.keyword}"})
     
     try:
@@ -207,27 +265,35 @@ async def create_product(request: CreateProductRequest):
         loop = asyncio.get_event_loop()
         link = await loop.run_in_executor(None, creator.run, trend_data)
         
-        if link:
-            await manager.broadcast({
-                "type": "product_created",
-                "message": f"Product created: {request.keyword}",
-                "link": link
-            })
-            return {"success": True, "link": link}
-        else:
-            raise HTTPException(status_code=500, detail="Failed to create product")
+        # CreationAgent now raises RuntimeError on failure, so if we get here it succeeded
+        logger.info(f"Product created successfully: {link}")
+        await manager.broadcast({
+            "type": "product_created",
+            "message": f"Product created: {request.keyword}",
+            "link": link
+        })
+        return {"success": True, "link": link}
             
+    except RuntimeError as e:
+        # Specific error from CreationAgent
+        error_msg = str(e)
+        logger.error(f"Creation agent error: {error_msg}")
+        await manager.broadcast({"type": "error", "message": error_msg})
+        raise HTTPException(status_code=500, detail=error_msg)
+        
     except Exception as e:
-        logger.error(f"Creation error: {e}")
-        await manager.broadcast({"type": "error", "message": str(e)})
-        raise HTTPException(status_code=500, detail=str(e))
+        # Unexpected error
+        error_msg = f"Unexpected error creating product: {str(e)}"
+        logger.error(error_msg, exc_info=True)
+        await manager.broadcast({"type": "error", "message": error_msg})
+        raise HTTPException(status_code=500, detail=error_msg)
 
 
 # ==================== PUBLISHING ENDPOINTS ====================
 
 @app.post("/api/publish")
 async def publish_product(request: PublishRequest):
-    """Publish product to Etsy/Pinterest."""
+    """Publish product to Pinterest for marketing automation."""
     await manager.broadcast({"type": "status", "message": f"Publishing to {request.platform}..."})
     
     try:

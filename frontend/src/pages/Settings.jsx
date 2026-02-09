@@ -21,10 +21,6 @@ function Settings() {
                             <span className="badge badge-success">Connected</span>
                         </div>
                         <div className="settings-item">
-                            <span className="settings-label">Etsy API</span>
-                            <span className="badge badge-warning">Not Configured</span>
-                        </div>
-                        <div className="settings-item">
                             <span className="settings-label">Pinterest API</span>
                             <span className="badge badge-warning">Not Configured</span>
                         </div>

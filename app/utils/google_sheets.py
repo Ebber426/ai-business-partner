@@ -34,33 +34,26 @@ def setup_tabs():
     if not sheet:
         return
 
-    # Map expected tabs to actual tab names in the user's sheet
-    # User has: research_logs, products, uploads, revenue, daily_activity
+    # New schema: research_runs and research_items
     required_tabs = {
-        "Research": "research_logs",
-        "Products": "products", 
-        "Activity Log": "daily_activity",
-        "Revenue": "revenue"
+        "research_runs": ["run_id", "timestamp", "keywords_count", "status"],
+        "research_items": ["run_id", "keyword", "demand_score", "product_type", "timestamp", "deleted"],
+        "products": ["Timestamp", "Product Name", "Type", "Link", "Status"],
+        "daily_activity": ["Timestamp", "Agent", "Action", "Result"],
+        "revenue": ["Timestamp", "Source", "Amount", "Currency"]
     }
     
     existing_tabs = [ws.title for ws in sheet.worksheets()]
 
-    for default_name, actual_name in required_tabs.items():
-        # Check if either name exists
-        if actual_name not in existing_tabs and default_name not in existing_tabs:
+    for tab_name, headers in required_tabs.items():
+        if tab_name not in existing_tabs:
             try:
-                sheet.add_worksheet(title=actual_name, rows=100, cols=10)
-                ws = sheet.worksheet(actual_name)
-                if "research" in actual_name.lower():
-                    ws.append_row(["Timestamp", "Keyword", "Platform", "Signal", "Notes"])
-                elif "products" in actual_name.lower():
-                    ws.append_row(["Timestamp", "Product Name", "Type", "Link", "Status"])
-                elif "activity" in actual_name.lower():
-                    ws.append_row(["Timestamp", "Agent", "Action", "Result"])
-                elif "revenue" in actual_name.lower():
-                    ws.append_row(["Timestamp", "Source", "Amount", "Currency"])
+                sheet.add_worksheet(title=tab_name, rows=100, cols=len(headers))
+                ws = sheet.worksheet(tab_name)
+                ws.append_row(headers)
+                print(f"Created sheet: {tab_name}")
             except Exception as e:
-                print(f"Tab setup note: {e}")
+                print(f"Tab setup note for {tab_name}: {e}")
 
 def log_activity(agent_name, action, result):
     """Logs an action to the Activity Log tab."""
@@ -144,10 +137,171 @@ def get_revenue():
         return 0.0
 
     try:
-        ws = sheet.worksheet("Revenue")
+        ws = sheet.worksheet("revenue")
         records = ws.get_all_records()
         total = sum(float(r["Amount"]) for r in records if str(r["Amount"]).replace('.', '', 1).isdigit())
         return total
     except Exception as e:
         print(f"Error calculating revenue: {e}")
         return 0.0
+
+# ==================== RESEARCH RUN MANAGEMENT ====================
+
+def create_research_run():
+    """Creates a new research run and returns the run_id."""
+    import uuid
+    sheet = get_sheet()
+    if not sheet:
+        raise RuntimeError("Failed to connect to Google Sheets")
+    
+    try:
+        ws = sheet.worksheet("research_runs")
+        run_id = f"run_{uuid.uuid4().hex[:8]}"
+        timestamp = datetime.datetime.now().isoformat()
+        ws.append_row([run_id, timestamp, 0, "running"])
+        print(f"Created research run: {run_id}")
+        return run_id
+    except Exception as e:
+        raise RuntimeError(f"Failed to create research run: {e}") from e
+
+def complete_research_run(run_id, keywords_count):
+    """Marks a research run as complete."""
+    sheet = get_sheet()
+    if not sheet:
+        return
+    
+    try:
+        ws = sheet.worksheet("research_runs")
+        all_values = ws.get_all_values()
+        for i, row in enumerate(all_values):
+            if row[0] == run_id:
+                ws.update_cell(i + 1, 3, keywords_count)  # Update keywords_count
+                ws.update_cell(i + 1, 4, "complete")  # Update status
+                print(f"Marked run {run_id} as complete with {keywords_count} keywords")
+                break
+    except Exception as e:
+        print(f"Error completing research run: {e}")
+
+def save_research_items(run_id, items):
+    """Saves research items for a given run."""
+    sheet = get_sheet()
+    if not sheet:
+        raise RuntimeError("Failed to connect to Google Sheets")
+    
+    try:
+        ws = sheet.worksheet("research_items")
+        timestamp = datetime.datetime.now().isoformat()
+        
+        for item in items:
+            ws.append_row([
+                run_id,
+                item.get("keyword", ""),
+                item.get("demand_score", 0),
+                item.get("product_type", "Unknown"),
+                timestamp,
+                "FALSE"  # deleted
+            ])
+        print(f"Saved {len(items)} items to research_items")
+    except Exception as e:
+        raise RuntimeError(f"Failed to save research items: {e}") from e
+
+def get_latest_research_run():
+    """Gets the latest research run with its items."""
+    sheet = get_sheet()
+    if not sheet:
+        return {"results": []}
+    
+    try:
+        runs_ws = sheet.worksheet("research_runs")
+        runs = runs_ws.get_all_records()
+        
+        if not runs:
+            return {"results": []}
+        
+        # Get latest run (last row)
+        latest_run = runs[-1]
+        run_id = latest_run["run_id"]
+        
+        # Get items for this run
+        items_ws = sheet.worksheet("research_items")
+        all_items = items_ws.get_all_records()
+        
+        # Filter by run_id and not deleted
+        run_items = [
+            {
+                "keyword": item["keyword"],
+                "signal": float(item["demand_score"]),
+                "platform": item["product_type"],
+                "notes": f"From run: {run_id}",
+                "timestamp": item["timestamp"]
+            }
+            for item in all_items
+            if item["run_id"] == run_id and item["deleted"] != "TRUE"
+        ]
+        
+        return {"results": run_items, "run_id": run_id}
+    except Exception as e:
+        print(f"Error getting latest research run: {e}")
+        return {"results": []}
+
+def delete_research_item(keyword):
+    """Marks a research item as deleted."""
+    sheet = get_sheet()
+    if not sheet:
+        raise RuntimeError("Failed to connect to Google Sheets")
+    
+    try:
+        ws = sheet.worksheet("research_items")
+        all_values = ws.get_all_values()
+        
+        # Find and mark as deleted (from latest run)
+        runs_ws = sheet.worksheet("research_runs")
+        runs = runs_ws.get_all_records()
+        if not runs:
+            raise RuntimeError("No research runs found")
+        
+        latest_run_id = runs[-1]["run_id"]
+        
+        for i, row in enumerate(all_values):
+            if i == 0:  # Skip header
+                continue
+            if row[0] == latest_run_id and row[1] == keyword and row[5] != "TRUE":
+                ws.update_cell(i + 1, 6, "TRUE")  # Mark deleted
+                print(f"Deleted item: {keyword}")
+                return True
+        
+        raise RuntimeError(f"Item '{keyword}' not found in latest run")
+    except Exception as e:
+        raise RuntimeError(f"Failed to delete research item: {e}") from e
+
+def delete_latest_research_run():
+    """Marks all items in the latest research run as deleted."""
+    sheet = get_sheet()
+    if not sheet:
+        raise RuntimeError("Failed to connect to Google Sheets")
+    
+    try:
+        # Get latest run_id
+        runs_ws = sheet.worksheet("research_runs")
+        runs = runs_ws.get_all_records()
+        if not runs:
+            raise RuntimeError("No research runs found")
+        
+        latest_run_id = runs[-1]["run_id"]
+        
+        # Mark all items as deleted
+        items_ws = sheet.worksheet("research_items")
+        all_values = items_ws.get_all_values()
+        
+        deleted_count = 0
+        for i, row in enumerate(all_values):
+            if i == 0:  # Skip header
+                continue
+            if row[0] == latest_run_id and row[5] != "TRUE":
+                items_ws.update_cell(i + 1, 6, "TRUE")
+                deleted_count += 1
+        
+        print(f"Deleted {deleted_count} items from run {latest_run_id}")
+        return deleted_count
+    except Exception as e:
+        raise RuntimeError(f"Failed to delete latest research run: {e}") from e

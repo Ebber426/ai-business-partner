@@ -1,33 +1,33 @@
-# Enhanced Research Agent
-# Multi-source trend detection for digital products
+"""
+Research Agent - Simplified for MVP
+Uses Google Trends ONLY for demand signals
+"""
 
 import time
 import random
 from datetime import datetime, timezone
-from typing import List, Dict, Optional
+from typing import List, Dict
 
 from pytrends.request import TrendReq
-from app.utils.google_sheets import save_research, log_activity
-from app.integrations.reddit_scraper import RedditResearcher
-from app.integrations.simulated_trends import SimulatedTrendSource
+from app.utils.google_sheets import (
+    create_research_run, 
+    save_research_items, 
+    complete_research_run, 
+    log_activity
+)
 
 
 class ResearchAgent:
     """
-    Multi-source Research Agent for digital product trend detection.
+    Simplified Research Agent for digital product trend detection.
     
-    Data Sources:
-    - Google Trends (pytrends) - search growth signals
-    - Reddit (PRAW) - discussion volume signals  
-    - Etsy (simulated) - buyer intent signals
-    - Pinterest (simulated) - search growth signals
+    Data Source: Google Trends ONLY
     
     Output Schema:
     {
         keyword: string,
-        source: "google_trends" | "reddit" | "simulated_etsy" | "simulated_pinterest",
-        signal_type: "search_growth" | "discussion_volume" | "buyer_intent",
-        score: number,
+        demand_score: number (0-100 normalized),
+        product_type: string (inferred from keyword),
         timestamp: ISO8601
     }
     """
@@ -43,85 +43,64 @@ class ResearchAgent:
         "meal planner",
         "goal tracker",
         "digital stickers",
-        "bullet journal template"
+        "bullet journal template",
+        "expense tracker",
+        "reading log",
+        "water tracker",
+        "mood tracker",
+        "gratitude journal"
     ]
     
-    # Scoring weights
-    WEIGHTS = {
-        "search_growth": 0.5,      # Google Trends weight
-        "discussion_volume": 0.3,  # Reddit weight
-        "buyer_intent": 0.2        # Simulated Etsy weight
-    }
-    
-    def __init__(self, keywords: Optional[List[str]] = None):
+    def __init__(self, keywords: List[str] = None):
         self.name = "Research Agent"
         self.keywords = keywords or self.DEFAULT_KEYWORDS
-        
-        # Initialize data sources
-        self.reddit = RedditResearcher()
-        self.simulated = SimulatedTrendSource()
-
-    def run(self, log_to_sheets: bool = True) -> List[Dict]:
+    
+    def run(self) -> List[Dict]:
         """
-        Execute the full research pipeline.
+        Execute research pipeline.
         
         Returns:
-            List of normalized trend data, sorted by composite score
+            List of trend data with run_id
         """
-        log_activity(self.name, "Start", f"Researching {len(self.keywords)} keywords")
-        print(f"\n🔍 Starting research for {len(self.keywords)} keywords...\n")
+        print(f"\n[{self.name}] Starting research for {len(self.keywords)} keywords...")
         
-        all_results = []
+        # Create research run
+        try:
+            run_id = create_research_run()
+        except Exception as e:
+            log_activity(self.name, "Error", f"Failed to create run: {e}")
+            raise RuntimeError(f"Failed to create research run: {e}") from e
         
-        # 1. Google Trends
-        print("📈 Fetching Google Trends...")
-        google_results = self._get_google_trends()
-        all_results.extend(google_results)
-        print(f"   Found {len(google_results)} Google Trends signals")
+        log_activity(self.name, "Start", f"Run {run_id}: Researching {len(self.keywords)} keywords")
         
-        # 2. Reddit
-        print("💬 Searching Reddit discussions...")
-        reddit_results = self.reddit.search_trends(self.keywords)
-        all_results.extend(reddit_results)
-        print(f"   Found {len(reddit_results)} Reddit signals")
+        # Get Google Trends data
+        print(f"[{self.name}] Fetching Google Trends data...")
+        trends = self._get_google_trends()
         
-        # 3. Simulated Etsy & Pinterest
-        print("🛒 Generating Etsy/Pinterest simulations...")
-        simulated_results = self.simulated.get_combined_simulation(self.keywords)
-        all_results.extend(simulated_results)
-        print(f"   Generated {len(simulated_results)} simulated signals")
-        
-        if not all_results:
-            log_activity(self.name, "Warning", "No trends found")
+        if not trends:
+            log_activity(self.name, "Warning", f"Run {run_id}: No trends found")
+            complete_research_run(run_id, 0)
             return []
         
-        # 4. Calculate composite scores per keyword
-        print("\n📊 Calculating composite scores...")
-        ranked_products = self._calculate_composite_scores(all_results)
+        # Deduplicate within run
+        deduped = self._deduplicate_keywords(trends)
+        print(f"[{self.name}] Deduplication: {len(trends)} → {len(deduped)} unique keywords")
         
-        # 5. Get top 5 product ideas
-        top_5 = ranked_products[:5]
+        # Infer product types
+        enriched = self._infer_product_types(deduped)
         
-        # 6. Log to console
-        print("\n" + "="*60)
-        print("🏆 TOP 5 PRODUCT IDEAS")
-        print("="*60)
-        for i, product in enumerate(top_5, 1):
-            print(f"\n{i}. {product['keyword'].title()}")
-            print(f"   Composite Score: {product['composite_score']:.1f}")
-            print(f"   Search Growth:   {product.get('search_growth_score', 0):.1f}")
-            print(f"   Discussion:      {product.get('discussion_score', 0):.1f}")
-            print(f"   Buyer Intent:    {product.get('buyer_intent_score', 0):.1f}")
-        print("\n" + "="*60)
+        # Save to Google Sheets
+        try:
+            save_research_items(run_id, enriched)
+            complete_research_run(run_id, len(enriched))
+        except Exception as e:
+            log_activity(self.name, "Error", f"Run {run_id}: Failed to save: {e}")
+            raise RuntimeError(f"Failed to save research results: {e}") from e
         
-        # 7. Log to Google Sheets
-        if log_to_sheets:
-            self._log_results_to_sheets(ranked_products)
+        log_activity(self.name, "Success", f"Run {run_id}: Found {len(enriched)} trends")
+        print(f"[{self.name}] ✅ Research complete: {len(enriched)} results saved")
         
-        log_activity(self.name, "Success", f"Found {len(ranked_products)} trends, top: {top_5[0]['keyword'] if top_5 else 'none'}")
-        
-        # Return normalized format for orchestrator
-        return self._normalize_for_output(ranked_products)
+        return enriched
     
     def _get_google_trends(self) -> List[Dict]:
         """Fetch trend data from Google Trends using pytrends."""
@@ -133,13 +112,14 @@ class ResearchAgent:
             # Process in batches of 5 (pytrends limit)
             for i in range(0, len(self.keywords), 5):
                 batch = self.keywords[i:i+5]
+                print(f"[{self.name}]   Processing batch {i//5 + 1}...")
                 
                 try:
                     pytrends.build_payload(
                         batch, 
                         cat=0, 
-                        timeframe='today 1-m', 
-                        geo='', 
+                        timeframe='today 3-m',  # 3-month window
+                        geo='US', 
                         gprop=''
                     )
                     
@@ -152,144 +132,107 @@ class ResearchAgent:
                             if score > 0:
                                 results.append({
                                     "keyword": keyword,
-                                    "source": "google_trends",
-                                    "signal_type": "search_growth",
-                                    "score": round(score, 2),
-                                    "timestamp": datetime.now(timezone.utc).isoformat(),
-                                    "notes": "30-day average interest"
+                                    "demand_score": round(score, 2),
+                                    "timestamp": datetime.now(timezone.utc).isoformat()
                                 })
                     
-                    # Rate limiting
-                    time.sleep(random.uniform(1, 2))
+                    # Rate limiting - be respectful
+                    time.sleep(random.uniform(1.5, 3.0))
                     
                 except Exception as e:
-                    print(f"   Batch error: {e}")
-                    continue
+                    print(f"[{self.name}]   ⚠️  Batch error: {e}")
+                    # Use fallback for this batch
+                    for keyword in batch:
+                        results.append({
+                            "keyword": keyword,
+                            "demand_score": random.randint(30, 70),
+                            "timestamp": datetime.now(timezone.utc).isoformat(),
+                            "simulated": True
+                        })
                     
         except Exception as e:
-            print(f"   Pytrends failed: {e}. Using simulated data.")
-            log_activity(self.name, "Warning", f"Pytrends error: {e}")
+            print(f"[{self.name}] ⚠️  Pytrends failed: {e}. Using fallback simulation.")
+            log_activity(self.name, "Warning", f"Pytrends error: {e}, using fallback")
             results = self._simulate_google_trends()
         
         return results
     
     def _simulate_google_trends(self) -> List[Dict]:
-        """Fallback simulated Google Trends data."""
+        """Fallback simulation when pytrends fails."""
+        print(f"[{self.name}] Using simulated demand data...")
         results = []
         
-        high_volume = ["daily planner", "budget tracker", "habit tracker"]
+        high_demand = ["daily planner", "budget tracker", "habit tracker", "meal planner"]
         
         for keyword in self.keywords:
-            if keyword.lower() in high_volume:
+            if keyword.lower() in high_demand:
                 score = random.randint(60, 95)
             else:
                 score = random.randint(25, 65)
             
             results.append({
                 "keyword": keyword,
-                "source": "google_trends",
-                "signal_type": "search_growth",
-                "score": score,
+                "demand_score": score,
                 "timestamp": datetime.now(timezone.utc).isoformat(),
-                "notes": "Simulated (pytrends fallback)",
                 "simulated": True
             })
         
         return results
     
-    def _calculate_composite_scores(self, all_results: List[Dict]) -> List[Dict]:
-        """
-        Calculate composite scores for each keyword.
+    def _deduplicate_keywords(self, trends: List[Dict]) -> List[Dict]:
+        """Deduplicate keywords within a single run."""
+        seen = set()
+        deduped = []
         
-        Formula: score = (search_growth * 0.5) + (discussion_volume * 0.3) + (buyer_intent * 0.2)
-        """
-        # Group by keyword
-        keyword_data = {}
+        for trend in trends:
+            # Normalize: lowercase, strip
+            normalized = trend["keyword"].lower().strip()
+            
+            if normalized not in seen:
+                seen.add(normalized)
+                deduped.append(trend)
         
-        for result in all_results:
-            kw = result["keyword"].lower()
-            if kw not in keyword_data:
-                keyword_data[kw] = {
-                    "keyword": result["keyword"],
-                    "search_growth_scores": [],
-                    "discussion_scores": [],
-                    "buyer_intent_scores": [],
-                    "sources": []
-                }
-            
-            signal_type = result.get("signal_type", "")
-            score = result.get("score", 0)
-            
-            if signal_type == "search_growth":
-                keyword_data[kw]["search_growth_scores"].append(score)
-            elif signal_type == "discussion_volume":
-                keyword_data[kw]["discussion_scores"].append(score)
-            elif signal_type == "buyer_intent":
-                keyword_data[kw]["buyer_intent_scores"].append(score)
-            
-            keyword_data[kw]["sources"].append(result["source"])
+        return deduped
+    
+    def _infer_product_types(self, trends: List[Dict]) -> List[Dict]:
+        """Infer product type from keyword."""
+        product_type_map = {
+            "planner": "Planner",
+            "tracker": "Tracker",
+            "journal": "Journal",
+            "template": "Template",
+            "log": "Log",
+            "sticker": "Stickers",
+            "budget": "Budget Tool",
+            "habit": "Habit Tracker",
+            "meal": "Meal Planner",
+            "fitness": "Fitness Tool"
+        }
         
-        # Calculate composite scores
-        ranked = []
-        
-        for kw, data in keyword_data.items():
-            # Average each signal type
-            search_growth = sum(data["search_growth_scores"]) / len(data["search_growth_scores"]) if data["search_growth_scores"] else 0
-            discussion = sum(data["discussion_scores"]) / len(data["discussion_scores"]) if data["discussion_scores"] else 0
-            buyer_intent = sum(data["buyer_intent_scores"]) / len(data["buyer_intent_scores"]) if data["buyer_intent_scores"] else 0
+        enriched = []
+        for trend in trends:
+            keyword_lower = trend["keyword"].lower()
+            product_type = "Template"  # Default
             
-            # Apply weights
-            composite = (
-                search_growth * self.WEIGHTS["search_growth"] +
-                discussion * self.WEIGHTS["discussion_volume"] +
-                buyer_intent * self.WEIGHTS["buyer_intent"]
-            )
+            # Match keyword patterns
+            for pattern, ptype in product_type_map.items():
+                if pattern in keyword_lower:
+                    product_type = ptype
+                    break
             
-            ranked.append({
-                "keyword": data["keyword"],
-                "composite_score": round(composite, 2),
-                "search_growth_score": round(search_growth, 2),
-                "discussion_score": round(discussion, 2),
-                "buyer_intent_score": round(buyer_intent, 2),
-                "sources": list(set(data["sources"])),
-                "timestamp": datetime.now(timezone.utc).isoformat()
+            enriched.append({
+                **trend,
+                "product_type": product_type
             })
         
-        # Sort by composite score descending
-        ranked.sort(key=lambda x: x["composite_score"], reverse=True)
-        
-        return ranked
-    
-    def _log_results_to_sheets(self, results: List[Dict]):
-        """Log research results to Google Sheets."""
-        try:
-            for result in results[:10]:  # Log top 10
-                save_research({
-                    "keyword": result["keyword"],
-                    "platform": ", ".join(result["sources"]),
-                    "signal": result["composite_score"],
-                    "notes": f"SG:{result['search_growth_score']} DV:{result['discussion_score']} BI:{result['buyer_intent_score']}"
-                })
-            print(f"\n📝 Logged {min(10, len(results))} results to Google Sheets")
-        except Exception as e:
-            print(f"⚠️  Failed to log to sheets: {e}")
-    
-    def _normalize_for_output(self, ranked: List[Dict]) -> List[Dict]:
-        """Normalize output for orchestrator compatibility."""
-        return [
-            {
-                "keyword": r["keyword"],
-                "platform": "Multi-Source",
-                "signal": r["composite_score"],
-                "notes": f"Top signals from: {', '.join(r['sources'])}"
-            }
-            for r in ranked
-        ]
+        return enriched
 
 
 if __name__ == "__main__":
-    # Test the enhanced research agent
+    # Test the simplified research agent
     agent = ResearchAgent()
-    results = agent.run(log_to_sheets=False)
+    results = agent.run()
     
-    print(f"\n\nReturned {len(results)} results for orchestrator.")
+    print(f"\n\nReturned {len(results)} results.")
+    for r in results[:5]:
+        print(f"  {r['keyword']}: {r['demand_score']} ({r['product_type']})")

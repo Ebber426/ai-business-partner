@@ -13,6 +13,12 @@
     flex: 1;
 }
 
+.header-actions {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+}
+
 .message-bar {
     padding: 16px 20px;
     background: var(--bg-card);

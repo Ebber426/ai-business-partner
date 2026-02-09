@@ -41,7 +41,6 @@ def check_env_variables():
     optional = {
         "REDDIT_CLIENT_ID": os.getenv("REDDIT_CLIENT_ID"),
         "REDDIT_CLIENT_SECRET": os.getenv("REDDIT_CLIENT_SECRET"),
-        "ETSY_API_KEY": os.getenv("ETSY_API_KEY"),
         "PINTEREST_APP_ID": os.getenv("PINTEREST_APP_ID"),
     }
     
