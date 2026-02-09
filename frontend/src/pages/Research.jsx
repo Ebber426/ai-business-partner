@@ -182,6 +182,11 @@ function Research() {
                             key={`${trend.keyword}-${i}`}
                             keyword={trend.keyword || trend.Keyword}
                             score={parseFloat(trend.signal || trend.Signal || 0)}
+                            velocity={parseFloat(trend.velocity || 0)}
+                            category={trend.category || 'stable'}
+                            confidence={trend.confidence || 'medium'}
+                            confidence_score={parseFloat(trend.confidence_score || 0.5)}
+                            explanation={trend.explanation || ''}
                             sources={[trend.platform || trend.Platform || 'Google Trends']}
                             onSelect={() => createProduct(trend.keyword || trend.Keyword)}
                             onDelete={deleteItem}

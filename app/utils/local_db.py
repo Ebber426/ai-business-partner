@@ -36,19 +36,50 @@ def init_db():
         )
     """)
     
-    # Research items table
+    # Research items table with enriched trend data
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS research_items (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             run_id TEXT NOT NULL,
             keyword TEXT NOT NULL,
             demand_score REAL DEFAULT 0,
+            velocity REAL DEFAULT 0,
+            category TEXT DEFAULT 'stable',
+            confidence TEXT DEFAULT 'medium',
+            confidence_score REAL DEFAULT 0.5,
+            explanation TEXT,
             product_type TEXT,
             timestamp TEXT NOT NULL,
             deleted INTEGER DEFAULT 0,
             FOREIGN KEY (run_id) REFERENCES research_runs(run_id)
         )
     """)
+    
+    # Add new columns to existing tables (migration-safe)
+    try:
+        cursor.execute("ALTER TABLE research_items ADD COLUMN velocity REAL DEFAULT 0")
+    except sqlite3.OperationalError:
+        pass  # Column already exists
+    
+    try:
+        cursor.execute("ALTER TABLE research_items ADD COLUMN category TEXT DEFAULT 'stable'")
+    except sqlite3.OperationalError:
+        pass
+    
+    try:
+        cursor.execute("ALTER TABLE research_items ADD COLUMN confidence TEXT DEFAULT 'medium'")
+    except sqlite3.OperationalError:
+        pass
+    
+    try:
+        cursor.execute("ALTER TABLE research_items ADD COLUMN confidence_score REAL DEFAULT 0.5")
+    except sqlite3.OperationalError:
+        pass
+    
+    try:
+        cursor.execute("ALTER TABLE research_items ADD COLUMN explanation TEXT")
+    except sqlite3.OperationalError:
+        pass
     
     # Activity log table
     cursor.execute("""
@@ -124,12 +155,18 @@ def save_research_items(run_id: str, items: List[Dict]):
     for item in items:
         cursor.execute(
             """INSERT INTO research_items 
-               (run_id, keyword, demand_score, product_type, timestamp, deleted) 
-               VALUES (?, ?, ?, ?, ?, ?)""",
+               (run_id, keyword, demand_score, velocity, category, confidence, 
+                confidence_score, explanation, product_type, timestamp, deleted) 
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 run_id,
                 item.get("keyword", ""),
                 item.get("demand_score", 0),
+                item.get("velocity", 0),
+                item.get("category", "stable"),
+                item.get("confidence", "medium"),
+                item.get("confidence_score", 0.5),
+                item.get("explanation", ""),
                 item.get("product_type", "Unknown"),
                 timestamp,
                 0
@@ -142,7 +179,7 @@ def save_research_items(run_id: str, items: List[Dict]):
 
 
 def get_latest_research_run() -> Dict:
-    """Gets the latest research run with its items."""
+    """Gets the latest research run with its enriched items."""
     conn = get_connection()
     cursor = conn.cursor()
     
@@ -158,9 +195,10 @@ def get_latest_research_run() -> Dict:
     
     run_id = run["run_id"]
     
-    # Get items for this run (not deleted)
+    # Get items for this run (not deleted) with all enriched fields
     cursor.execute(
-        """SELECT keyword, demand_score, product_type, timestamp 
+        """SELECT keyword, demand_score, velocity, category, confidence, 
+                  confidence_score, explanation, product_type, timestamp 
            FROM research_items 
            WHERE run_id = ? AND deleted = 0""",
         (run_id,)
@@ -173,8 +211,12 @@ def get_latest_research_run() -> Dict:
         {
             "keyword": item["keyword"],
             "signal": float(item["demand_score"]),
+            "velocity": float(item["velocity"]) if item["velocity"] else 0,
+            "category": item["category"] or "stable",
+            "confidence": item["confidence"] or "medium",
+            "confidence_score": float(item["confidence_score"]) if item["confidence_score"] else 0.5,
+            "explanation": item["explanation"] or "",
             "platform": item["product_type"],
-            "notes": f"From run: {run_id}",
             "timestamp": item["timestamp"]
         }
         for item in items

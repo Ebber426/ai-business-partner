@@ -57,10 +57,10 @@ class ResearchAgent:
     
     def run(self) -> List[Dict]:
         """
-        Execute research pipeline.
+        Execute research pipeline with enriched trend analysis.
         
         Returns:
-            List of trend data with run_id
+            List of trend data with run_id and enriched metrics
         """
         print(f"\n[{self.name}] Starting research for {len(self.keywords)} keywords...")
         
@@ -73,9 +73,9 @@ class ResearchAgent:
         
         log_activity(self.name, "Start", f"Run {run_id}: Researching {len(self.keywords)} keywords")
         
-        # Get Google Trends data
+        # Get Google Trends data with time series
         print(f"[{self.name}] Fetching Google Trends data...")
-        trends = self._get_google_trends()
+        trends, time_series_data = self._get_google_trends()
         
         if not trends:
             log_activity(self.name, "Warning", f"Run {run_id}: No trends found")
@@ -86,10 +86,13 @@ class ResearchAgent:
         deduped = self._deduplicate_keywords(trends)
         print(f"[{self.name}] Deduplication: {len(trends)} → {len(deduped)} unique keywords")
         
-        # Infer product types
-        enriched = self._infer_product_types(deduped)
+        # Enrich with velocity and categorization
+        enriched = self._enrich_trends(deduped, time_series_data)
         
-        # Save to Google Sheets
+        # Infer product types
+        enriched = self._infer_product_types(enriched)
+        
+        # Save to database
         try:
             save_research_items(run_id, enriched)
             complete_research_run(run_id, len(enriched))
@@ -102,9 +105,14 @@ class ResearchAgent:
         
         return enriched
     
-    def _get_google_trends(self) -> List[Dict]:
-        """Fetch trend data from Google Trends using pytrends."""
+    def _get_google_trends(self):
+        """Fetch trend data from Google Trends using pytrends.
+        
+        Returns:
+            tuple: (trends list, time_series_data dict)
+        """
         results = []
+        time_series_data = {}
         
         try:
             pytrends = TrendReq(hl='en-US', tz=360)
@@ -135,6 +143,8 @@ class ResearchAgent:
                                     "demand_score": round(score, 2),
                                     "timestamp": datetime.now(timezone.utc).isoformat()
                                 })
+                                # Store time series for velocity calculation
+                                time_series_data[keyword] = data[keyword].tolist() if keyword in data.columns else []
                     
                     # Rate limiting - be respectful
                     time.sleep(random.uniform(1.5, 3.0))
@@ -149,18 +159,24 @@ class ResearchAgent:
                             "timestamp": datetime.now(timezone.utc).isoformat(),
                             "simulated": True
                         })
+                        time_series_data[keyword] = []
                     
         except Exception as e:
             print(f"[{self.name}] ⚠️  Pytrends failed: {e}. Using fallback simulation.")
             log_activity(self.name, "Warning", f"Pytrends error: {e}, using fallback")
-            results = self._simulate_google_trends()
+            results, time_series_data = self._simulate_google_trends()
         
-        return results
+        return results, time_series_data
     
-    def _simulate_google_trends(self) -> List[Dict]:
-        """Fallback simulation when pytrends fails."""
+    def _simulate_google_trends(self):
+        """Fallback simulation when pytrends fails.
+        
+        Returns:
+            tuple: (trends list, time_series_data dict)
+        """
         print(f"[{self.name}] Using simulated demand data...")
         results = []
+        time_series_data = {}
         
         high_demand = ["daily planner", "budget tracker", "habit tracker", "meal planner"]
         
@@ -176,8 +192,10 @@ class ResearchAgent:
                 "timestamp": datetime.now(timezone.utc).isoformat(),
                 "simulated": True
             })
+            # Generate fake time series for simulation
+            time_series_data[keyword] = [random.randint(max(0, score-20), min(100, score+20)) for _ in range(12)]
         
-        return results
+        return results, time_series_data
     
     def _deduplicate_keywords(self, trends: List[Dict]) -> List[Dict]:
         """Deduplicate keywords within a single run."""
@@ -193,6 +211,135 @@ class ResearchAgent:
                 deduped.append(trend)
         
         return deduped
+    
+    def _enrich_trends(self, trends: List[Dict], time_series_data: Dict) -> List[Dict]:
+        """Enrich trends with velocity, categorization, confidence, and explanations."""
+        enriched = []
+        
+        for trend in trends:
+            keyword = trend["keyword"]
+            demand_score = trend["demand_score"]
+            time_series = time_series_data.get(keyword, [])
+            
+            # Calculate velocity (growth rate)
+            velocity = self._calculate_velocity(time_series, demand_score)
+            
+            # Categorize trend
+            category = self._categorize_trend(velocity, demand_score)
+            
+            # Calculate confidence
+            confidence, confidence_score = self._calculate_confidence(time_series, velocity, demand_score)
+            
+            # Generate explanation
+            explanation = self._generate_explanation(velocity, demand_score, category)
+            
+            enriched.append({
+                **trend,
+                "velocity": velocity,
+                "category": category,
+                "confidence": confidence,
+                "confidence_score": confidence_score,
+                "explanation": explanation
+            })
+        
+        return enriched
+    
+    def _calculate_velocity(self, time_series: List, current_score: float) -> float:
+        """Calculate growth velocity from time series data."""
+        if not time_series or len(time_series) < 2:
+            return 0.0
+        
+        # Compare recent average to older average
+        mid_point = len(time_series) // 2
+        older_avg = sum(time_series[:mid_point]) / mid_point if mid_point > 0 else 0
+        recent_avg = sum(time_series[mid_point:]) / (len(time_series) - mid_point)
+        
+        if older_avg == 0:
+            # Growing from very low baseline
+            return 100.0 if recent_avg > 10 else 0.0
+        
+        # Calculate percentage growth
+        velocity = ((recent_avg - older_avg) / older_avg) * 100
+        return round(velocity, 1)
+    
+    def _categorize_trend(self, velocity: float, demand_score: float) -> str:
+        """Categorize trend as emerging, spiking, or stable."""
+        # 📈 Emerging: Steady growth (30-60% velocity, low-medium baseline)
+        if 30 <= velocity <= 60 and demand_score < 60:
+            return "emerging"
+        
+        # 🔥 Spiking: Rapid growth (>60% velocity or very high score)
+        if velocity > 60 or demand_score > 80:
+            return "spiking"
+        
+        # 💤 Stable: Consistent interest (<30% velocity, any baseline)
+        return "stable"
+    
+    def _calculate_confidence(self, time_series: List, velocity: float, demand_score: float) -> tuple:
+        """Calculate confidence score based on consistency and other factors."""
+        score = 0.5  # Default medium
+        
+        # Factor 1: Consistency (low volatility)
+        if time_series and len(time_series) > 3:
+            avg = sum(time_series) / len(time_series)
+            variance = sum((x - avg) ** 2 for x in time_series) / len(time_series)
+            std_dev = variance ** 0.5
+            
+            if std_dev < 10:  # Low volatility
+                score += 0.2
+            elif std_dev > 30:  # High volatility
+                score -= 0.2
+        
+        # Factor 2: Absolute interest level
+        if demand_score > 60:
+            score += 0.15
+        elif demand_score < 20:
+            score -= 0.15
+        
+        # Factor 3: Velocity consistency
+        if 0 <= abs(velocity) <= 100:  # Reasonable velocity
+            score += 0.1
+        
+        # Clamp between 0 and 1
+        score = max(0.0, min(1.0, score))
+        
+        # Convert to label
+        if score >= 0.7:
+            label = "high"
+        elif score >= 0.4:
+            label = "medium"
+        else:
+            label = "low"
+        
+        return label, round(score, 2)
+    
+    def _generate_explanation(self, velocity: float, demand_score: float, category: str) -> str:
+        """Generate 'Why this matters' explanation text."""
+        # Describe velocity
+        if velocity > 100:
+            growth_desc = f"Interest grew {int(velocity/100)}×"
+        elif velocity > 30:
+            growth_desc = f"Interest increased {int(velocity)}%"
+        elif velocity < -30:
+            growth_desc = f"Interest declined {abs(int(velocity))}%"
+        else:
+            growth_desc = "Interest remained stable"
+        
+        # Describe baseline
+        if demand_score > 70:
+            baseline_desc = "high historical baseline"
+        elif demand_score > 40:
+            baseline_desc = "moderate baseline"
+        else:
+            baseline_desc = "low baseline"
+        
+        # Category-specific insights
+        if category == "emerging":
+            return f"{growth_desc} with steady momentum. {baseline_desc.capitalize()}, strong growth potential."
+        elif category == "spiking":
+            return f"{growth_desc} rapidly. {baseline_desc.capitalize()}. Trending now!"
+        else:
+            return f"{growth_desc}. {baseline_desc.capitalize()}. Consistent demand."
     
     def _infer_product_types(self, trends: List[Dict]) -> List[Dict]:
         """Infer product type from keyword."""
